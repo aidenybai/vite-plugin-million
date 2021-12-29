@@ -1,51 +1,89 @@
 import { Plugin } from 'vite';
-import MagicString from 'magic-string';
-import { h } from 'million/jsx-runtime';
-import devalue from 'devalue';
+import { parse, print, visit, types } from 'recast';
+import { Path } from 'ast-types/lib/path';
+import { VFlags } from 'million';
+
+const { literal, property, objectExpression, arrayExpression } = types.builders;
+
+const vnode = (value: Path['value']): types.namedTypes.ObjectExpression => {
+  const children = value.arguments.slice(2);
+  const normalizedChildren = [];
+  let flag = VFlags.ANY_CHILDREN;
+  let keyed = true;
+
+  if (children.length === 0) flag = VFlags.NO_CHILDREN;
+  else if (
+    children.every(
+      (child: types.namedTypes.Literal) => child.type === 'Literal'
+    )
+  )
+    flag = VFlags.ONLY_TEXT_CHILDREN;
+  for (const child of flat(children)) {
+    if (child.type === 'CallExpression' && child.callee.name === 'h') {
+      if (
+        !child.arguments[1]?.properties?.some(
+          (prop: types.namedTypes.Property) =>
+            (<types.namedTypes.Identifier>prop.key).name === 'key'
+        )
+      )
+        keyed = false;
+      normalizedChildren.push(vnode(child));
+    } else {
+      if (child.type === 'Literal' && typeof child.value !== 'string')
+        normalizedChildren.push(literal(String(child.value)));
+      else normalizedChildren.push(child);
+    }
+  }
+  if (keyed) flag = VFlags.ONLY_KEYED_CHILDREN;
+  return objectExpression([
+    property('init', literal('tag'), value.arguments[0]),
+    property('init', literal('props'), value.arguments[1]),
+    property('init', literal('children'), arrayExpression(normalizedChildren)),
+    property('init', literal('flag'), literal(flag)),
+  ]);
+};
+
+const flat = (arr: Path['value'][], depth = 1): Path['value'][] => {
+  return depth > 0
+    ? arr.reduce(
+        (acc: Path['value'][], val) =>
+          acc.concat(Array.isArray(val) ? flat(val, depth - 1) : val),
+        []
+      )
+    : arr.slice();
+};
 
 const createPlugins = (): Plugin[] => {
-  let useSourceMap = false;
-  const loadCache: Map<
-    string,
-    { data?: any; code?: string; watchFiles?: string[] }
-  > = new Map();
   return [
     {
       name: 'compiler',
-      enforce: 'pre',
-      configResolved(config) {
-        useSourceMap = !!config.build.sourcemap;
-      },
-      configureServer(server) {
-        server.watcher.on('all', (_, id) => {
-          for (const [k, cache] of loadCache) {
-            if (cache.watchFiles?.includes(id)) {
-              loadCache.delete(k);
-            }
-          }
-        });
-      },
       async transform(code, id) {
-        if (id.includes('node_modules') || !/\.(js|ts|mjs)$/.test(id)) return;
+        if (id.includes('node_modules') || !/\.(js|ts|mjs|jsx|tsx)$/.test(id))
+          return;
 
-        const matches = [...code.matchAll(/(h\(.+\))/g)];
+        const ast = parse(code);
 
-        if (matches.length === 0) return;
+        const callExpressionPaths: Path[] = [];
 
-        const string = new MagicString(code);
-        for (const item of matches) {
-          const start = item.index!;
-          const end = item.index! + item[0].length;
+        const pushCallExpressionPaths = (path: Path) => {
+          if (path.value.callee.name === 'h') {
+            callExpressionPaths.push(path);
+          }
+        };
 
-          try {
-            const data = new Function('h', `return ${item[1]}`)(h);
+        visit(ast, {
+          visitCallExpression(path: Path) {
+            pushCallExpressionPaths(path);
+            this.traverse(path);
+          },
+        });
 
-            string.overwrite(start, end, devalue(data));
-          } catch (_err) {}
+        for (const path of callExpressionPaths) {
+          path.replace(vnode(path.value));
         }
+
         return {
-          code: string.toString(),
-          map: useSourceMap ? string.generateMap({ source: id }) : null,
+          code: print(ast).code,
         };
       },
     },

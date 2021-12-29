@@ -1,6 +1,7 @@
 import { createElement } from 'million';
-import { h } from 'million/jsx-runtime';
 
-const vnode = h('div', undefined, 'Hello!');
+let hello = 'Hello!';
+
+const vnode = <div>Hello World</div>;
 
 document.body.appendChild(createElement(vnode));
