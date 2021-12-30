@@ -5,7 +5,10 @@ import { VFlags } from 'million';
 
 const { literal, property, objectExpression, arrayExpression } = types.builders;
 
-const vnode = (value: Path['value']): types.namedTypes.ObjectExpression => {
+const vnode = (
+  value: Path['value'],
+  key?: string
+): types.namedTypes.ObjectExpression => {
   const children = value.arguments.slice(2);
   const normalizedChildren = [];
   let flag = VFlags.ANY_CHILDREN;
@@ -20,14 +23,20 @@ const vnode = (value: Path['value']): types.namedTypes.ObjectExpression => {
     flag = VFlags.ONLY_TEXT_CHILDREN;
   for (const child of flat(children)) {
     if (child.type === 'CallExpression' && child.callee.name === 'h') {
+      let key = undefined;
       if (
         !child.arguments[1]?.properties?.some(
-          (prop: types.namedTypes.Property) =>
-            (<types.namedTypes.Identifier>prop.key).name === 'key'
+          (prop: types.namedTypes.Property) => {
+            const hasKey =
+              (<types.namedTypes.Identifier>prop.key).name === 'key';
+            if (hasKey) key = (<types.namedTypes.Literal>prop.value).value;
+
+            return hasKey;
+          }
         )
       )
         keyed = false;
-      normalizedChildren.push(vnode(child));
+      normalizedChildren.push(vnode(child, key));
     } else {
       if (child.type === 'Literal' && typeof child.value !== 'string')
         normalizedChildren.push(literal(String(child.value)));
@@ -35,12 +44,14 @@ const vnode = (value: Path['value']): types.namedTypes.ObjectExpression => {
     }
   }
   if (keyed) flag = VFlags.ONLY_KEYED_CHILDREN;
-  return objectExpression([
+  const properties = [
     property('init', literal('tag'), value.arguments[0]),
     property('init', literal('props'), value.arguments[1]),
     property('init', literal('children'), arrayExpression(normalizedChildren)),
     property('init', literal('flag'), literal(flag)),
-  ]);
+  ];
+  if (key) properties.push(property('init', literal('key'), literal(key)));
+  return objectExpression(properties);
 };
 
 const flat = (arr: Path['value'][], depth = 1): Path['value'][] => {
@@ -56,13 +67,12 @@ const flat = (arr: Path['value'][], depth = 1): Path['value'][] => {
 const createPlugins = (): Plugin[] => {
   return [
     {
-      name: 'compiler',
+      name: 'million',
       async transform(code, id) {
         if (id.includes('node_modules') || !/\.(js|ts|mjs|jsx|tsx)$/.test(id))
           return;
 
         const ast = parse(code);
-
         const callExpressionPaths: Path[] = [];
 
         const pushCallExpressionPaths = (path: Path) => {
@@ -82,9 +92,7 @@ const createPlugins = (): Plugin[] => {
           path.replace(vnode(path.value));
         }
 
-        return {
-          code: print(ast).code,
-        };
+        return { code: print(ast).code };
       },
     },
   ];

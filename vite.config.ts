@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import compiler from './src/compiler';
+import million from './src';
 
 export default defineConfig({
   esbuild: {
@@ -7,5 +7,5 @@ export default defineConfig({
     jsxFragment: 'Fragment',
     jsxInject: `import { h, jsxs, Fragment } from 'million/jsx-runtime'`,
   },
-  plugins: [compiler()],
+  plugins: [million()],
 });
