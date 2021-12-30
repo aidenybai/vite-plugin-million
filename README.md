@@ -46,4 +46,4 @@ export default defineConfig({
 
 ## License
 
-babel-preset-million is [MIT-licensed](LICENSE) open-source software by [Aiden Bai](https://github.com/aidenybai).
+vite-plugin-million is [MIT-licensed](LICENSE) open-source software by [Aiden Bai](https://github.com/aidenybai).
