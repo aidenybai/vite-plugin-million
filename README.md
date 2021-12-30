@@ -6,6 +6,10 @@ Generate raw objects instead of virtual node `h` calls.
 
 Please note that this is not a full replacement of `million/jsx-runtime`. It only supports basic children normalization, flag resolution. It does not support the `kebab`, `className`, `style`, or `delta` helpers or JSX automatic runtime.
 
+**With `vite-plugin-million`:** `<div>Hello World</div>` → `{ tag: 'div', props: null, children: ['Hello World'] }`
+
+**Without `vite-plugin-million`:** `<div>Hello World</div>` → `h('div', null, 'Hello World')`
+
 ## Install
 
 ```sh

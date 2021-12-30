@@ -12,5 +12,6 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "jsxImportSource": "million"
-  }
+  },
+  "include": ["src/**/*"]
 }
