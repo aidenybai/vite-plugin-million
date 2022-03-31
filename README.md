@@ -1,3 +1,5 @@
+> Merged into [Million repository](https://github.com/aidenybai/million)
+
 # vite-plugin-million
 
 > ⚡ Million.js' compiler powered by Vite.js.
